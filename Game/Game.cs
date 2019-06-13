@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Gamers;
 
@@ -18,6 +19,11 @@ namespace Game
         private int _totalCount = 0;
 
         private Gamer _winner = null;
+
+        private static CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+        private CancellationToken token = cancellationTokenSource.Token;
+
+
         public static Dictionary<GamerTypesEnum, GetSomePlayer> DictiorOfTypes = new Dictionary<GamerTypesEnum, GetSomePlayer>
         {
             { GamerTypesEnum.Usual, new GetSomePlayer(GetUsual) },
@@ -98,7 +104,7 @@ namespace Game
 
         public void ToPlay()
         {
-            List<Task> tasks = new List<Task>();
+         
 
             Task.WaitAll(Gamers.Select(i => ToPlayGamerAsync(i)).ToArray());
 
@@ -115,17 +121,23 @@ namespace Game
         {
             for (;;)
             {
-                Console.WriteLine(gamer.Name);
-                lock (Gamers)
+                if (token.IsCancellationRequested)
                 {
-                    if (++_totalCount > 100 || _winner != null)
-                        return;
+                    Console.WriteLine("Операция прервана токеном");
+                    return;
                 }
 
-                if ((await Task.Run(() => gamer.MakeStep())) == Weight)
+                Console.WriteLine(gamer.Name);
+
+                if ((await Task.Run(() => gamer.MakeStep(token))) == Weight)
                 {
                     _winner = gamer;
-                    return;
+                    cancellationTokenSource.Cancel();
+                }
+
+                if(++_totalCount > 100)
+                {
+                    cancellationTokenSource.Cancel();
                 }
             }
         }
